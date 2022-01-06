@@ -6,7 +6,7 @@ namespace SekaiDecryptor
 {
     class Program
     {
-        public const int head = 16;
+        public static readonly byte[] head = { 0x10, 0x00, 0x00, 0x00, 0xAA, 0x91, 0x96, 0x8B, 0x86, 0x46, 0x53 };
         static void Main(string[] args)
         {
             string savePath, assetPath;
@@ -18,20 +18,20 @@ namespace SekaiDecryptor
             GetPaths(paths, assetPath);
             MainProcess(paths, savePath, assetPath);
         }
-        public static bool IfSekaiAsset(BinaryReader binaryReader)
+        public static bool IfSekaiAsset(byte[] file)
         {
-            long fileHead = binaryReader.ReadInt32();
-            if (fileHead == head)
-                return true;
-            else
-                return false;
+            for (int i = 0; i < head.Length; i++)
+            {
+                if (file[i] != head[i]) return false;
+            }
+            return true;
         }
         public static void GetPaths(List<string> paths,string searchPath)
         {
+            paths.Add(searchPath);
             string[] withPath = Directory.GetDirectories(searchPath);
             foreach (var item in withPath)
             {
-                paths.Add(item);
                 GetPaths(paths, item);
             }
         }
@@ -49,27 +49,25 @@ namespace SekaiDecryptor
                 }
                 foreach (var file in files)
                 {
-                    FileStream input = File.OpenRead(file);
-                    if (input.Length <= 4) continue;
-                    using (BinaryReader oldFile = new BinaryReader(input))
+                    byte[] input = File.ReadAllBytes(file);
+                    if (input.Length <= 4+128) continue;
                     {
-                        if (!IfSekaiAsset(oldFile)) { continue; }
+                        if (!IfSekaiAsset(input)) { continue; }
                         string saveFile = file;
                         if (saveFile != originPath) saveFile = saveFile.Substring(originPath.Length);
                         saveFile = savePath + saveFile;
                         if (File.Exists(saveFile)) continue;
-                        FileStream newFile = File.Create(saveFile);
                         {
                             for (int i = 0; i < 16; i++)
                             {
                                 for (int j = 0; j < 8; j++)
                                 {
-                                    if (j < 5) newFile.WriteByte((byte)~oldFile.ReadByte());
-                                    else newFile.WriteByte(oldFile.ReadByte());
+                                    if (j < 5) input[4+i*8+j] = (byte)~input[4+i * 8 + j];
                                 }
                             }
-                            byte[] bytes = oldFile.ReadBytes((int)oldFile.BaseStream.Length - 128 - 4);
-                            newFile.Write(bytes,0, bytes.Length);
+                            FileStream fileStream = File.OpenWrite(saveFile);
+                            fileStream.Write(input, 4, input.Length - 4);
+                            fileStream.Close();
                         }
                         Console.WriteLine(saveFile);
                     }
